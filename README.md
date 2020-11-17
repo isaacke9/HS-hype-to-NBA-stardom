@@ -1,6 +1,5 @@
 # From High School Hype to NBA Stardom
-### STAT Capstone Project
-### Isaac Ke
+### STAT Capstone Project - Isaac Ke
 
 ## Introduction
 <p>LeBron James. Stephen Curry. What do these household names have in common? Surely, they both have been named the NBA’s Most Valuable Player (MVP) on multiple occasions and have led their teams to numerous world championships. However, only LeBron James was ranked the number one best player coming out of high school. In fact, Steph Curry was unranked by recruiters in high school which meant that he went so unnoticed that he couldn’t even crack the bottom of the list. Is future stardom really that hard to predict? Or was Steph Curry a once-in-a-blue-moon type of phenom?</p>
@@ -14,3 +13,8 @@
 
 ## Data
 [Data Source](https://data.world/the-pudding/hype) 
+
+## Aims
+<p>My first aim is to test my hypothesis that a player’s high school rank and draft position have a strong positive association with NBA career longevity. I aim to uncover what the true relationship is between a player’s pre-professional rankings and how many seasons they last in the NBA. </p>
+<p>My second aim is to test my related hypothesis that the better a player’s high school rank and draft position are, the higher the player’s maximum level reached will be (draft, rookie, bad, good, great, all-star). My goal is to assess which factors are good predictors of peak performance. </p>
+
