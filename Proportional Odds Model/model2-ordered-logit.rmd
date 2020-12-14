@@ -1,0 +1,214 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+## References
+
+> https://www.r-bloggers.com/2018/01/how-to-implement-random-forests-in-r/  
+> https://www.datacamp.com/community/tutorials/support-vector-machines-r  
+> https://stats.idre.ucla.edu/r/dae/ordinal-logistic-regression/  
+> https://data.library.virginia.edu/fitting-and-interpreting-a-proportional-odds-model/  
+  
+> https://uc-r.github.io/naive_bayes  
+> http://uc-r.github.io/svm  
+> https://uc-r.github.io/random_forests  
+> https://www.blopig.com/blog/2017/04/a-very-basic-introduction-to-random-forests-using-r/  
+
+
+## Motivation  
+### Aim 2  
+My second aim is to test my related hypothesis that the better a player’s high school rank, draft position, and NBA statistics are, the higher the player’s maximum level reached will be (draft, rookie, bad, good, great, all-star). My goal is to assess which factors are good predictors of peak performance.  
+  
+### Statistical Analysis Plan 2  
+I will investigate my hypothesis in aim 2. Since this is a classification problem involving ordinal data, I will use the methods of naïve Bayes classifiers and support vector machines. Based on factors such as high school rank, college/draft data, and NBA statistics, I will train a predictive model to place each player into different buckets of NBA success, or highest level reached: draft, rookie, bad, good, great, or all-star.
+
+
+# Required Packages
+```{r}
+require(dplyr)
+require(ggplot2)
+require(gplots)
+require(MASS)
+require(randomForest)
+require(caret)
+
+# for replication
+set.seed(1234)
+
+library(rsample)      # data splitting 
+library(randomForest) # basic implementation
+library(ranger)       # a faster implementation of randomForest
+library(caret)        # an aggregator package for performing many machine learning models
+library(h2o)          # an extremely fast java-based platform
+library(ROCR)         # ROC curve
+library(nnet)         # multinomial logistic models (for prop odds model)
+
+library(tibble)
+```
+
+# Load Data
+```{r}
+load("C:/Users/isaac/CAPSTONE-STAT-482/R-STAT-482-Capstone/merged_data.rdata")
+rf_data = filter(data, !(is.na(highest)) & !(is.na(draft_pk)) & !(is.na(hsrank)))  %>% dplyr::select(highest, draft_pk, hsrank, avgNBArank) # remove obs with na's in highest level reached, draft pick, and hs rank 
+
+# rf_data has 411 observations, so 1474 obs were removed
+
+str(rf_data)
+```
+
+
+
+
+
+
+
+#                 [[[[[[[  P R O P O R T I O N A L     O D D S      M O D E L  ]]]]]]]  
+
+
+
+
+
+
+
+# Boxplots (for assumptions)  
+```{r}
+ggplot(rf_data, aes(x=highest, y=hsrank)) + geom_boxplot(outlier.shape = NA) + geom_jitter(width = 0.15, alpha = 0.15) + ggtitle("Box Plots of High School Rank by Highest Level Reached") + theme(plot.title = element_text(hjust = 0.5))+xlab("Highest NBA Level Reached") + ylab("High School Rank")
+
+ggplot(rf_data, aes(x=highest, y=draft_pk)) + geom_boxplot(outlier.shape = NA) + geom_jitter(width = 0.15, alpha = 0.15) + ggtitle("Box Plots of Draft Pick by Highest Level Reached") + theme(plot.title = element_text(hjust = 0.5))+xlab("Highest NBA Level Reached") + ylab("Draft Pick")
+```
+
+Assumption of equal effect of covariates on each level of reponse supported in these boxplots (?) Steady change from box plot to box plot(?).
+
+"One of the assumptions underlying ordinal logistic (and ordinal probit) regression is that the relationship between each pair of outcome groups is the same. In other words, ordinal logistic regression assumes that the coefficients that describe the relationship between, say, the lowest versus all higher categories of the response variable are the same as those that describe the relationship between the next lowest category and all higher categories, etc. This is called the proportional odds assumption or the parallel regression assumption. Because the relationship between all pairs of groups is the same, there is only one set of coefficients."
+
+
+# Fit PROPORTIONAL ODDS MODEL  
+```{r}
+prop_odds_fit <- polr(highest ~ hsrank + draft_pk, data=rf_data, Hess = TRUE)
+summary(prop_odds_fit)
+```
+
+# plot lines  
+```{r}
+#levels <- factor(levels = c("highschool", "college", "draft", "rookie", "bad", "good", "great"))
+
+
+
+d <- data.frame(HighestLevel = c("highschool", "college", "draft", "rookie", "bad", "good", "great"),
+                intercept = c(-13.6504,-12.6666,-6.3159,-4.2115,-0.9628,0.4119,1.3068),
+                slope = c(-0.0632872,-0.0632872,-0.0632872,-0.0632872,-0.0632872,-0.0632872,-0.0632872))
+
+d$HighestLevel <- factor(d$HighestLevel, levels = c("highschool", "college", "draft", "rookie", "bad", "good", "great"))
+
+
+ggplot(d)  +
+  geom_abline(aes(intercept = intercept, slope = slope, color=HighestLevel), size=1) +
+  xlim(2.6, 57.5) +
+  ylim(-18, 2) +
+  ggtitle("Fitted Lines for Each Level of Highest Level Reached") + 
+  theme(plot.title = element_text(hjust = 0.5))+
+  xlab("draft pick") + 
+  ylab("log(odds)") +
+  scale_color_manual(values=c("#ff0000", "#ffa500", "#008000", "#0000ff", "#4b0082", "#ee82ee", "#000000"))
+```
+
+
+# get p-values for significance (two-sided probability) (alternative: coefficient !=0)
+```{r}
+# store table
+ctable <- coef(summary(prop_odds_fit))
+
+## calculate and store p values
+p <- pnorm(abs(ctable[, "t value"]), lower.tail = FALSE) * 2
+
+## combined table
+ctable <- cbind(ctable, "p value" = p)
+
+ctable
+```
+
+
+# get p-values for significance (one-sided probability) (alternative: coefficient < 0)
+```{r}
+# store table
+ctable_onesided <- coef(summary(prop_odds_fit))
+
+## calculate and store p values
+p <- pnorm(abs(ctable_onesided[, "t value"]), lower.tail = FALSE) 
+
+## combined table
+ctable_onesided <- cbind(ctable_onesided, "p value" = p)
+
+ctable_onesided
+```
+
+# confidence intervals for coefficients  
+```{r}
+confint.default(prop_odds_fit) # CIs assuming normality
+```
+
+Draft pick confidence interval does not contain 0, and the p-value for its coefficient is highly significant at the alpha = 0.05 level. On the other hand hsrank is not significant (p-value & confidence interval). This makes intuitive sense since a person's draft pick is a better indicator of their NBA performance because it is so close to that level (the level right before entering the NBA). With high school rank, that player has to go to college and rack up college stats and then be drafted - in this time period a lot can change in their performance level (and thus rank/ draft position/ NBA potential).  
+
+# exponentiate coefficients for ease of readability  
+```{r}
+## odds ratios
+exp(coef(prop_odds_fit))
+
+## odds ratio and CI
+exp(cbind(Odds_ratio = coef(prop_odds_fit), ci))
+```
+
+These coefficients are called proportional odds ratios and we would interpret these pretty much as we would odds ratios from a binary logistic regression. 
+
+Interpret: All other factors held constant, when a player moves down 1 rank in high school rank (numerically gets larger), his odds of reaching the next "highest level" in the NBA decreases by 0.09959%. In a more reasonable wording, when a player moves up 1 high rank (numerically lower), his odds of reaching the next performance tier in the NBA increases by 0.09959%. 
+
+Similarly, with all other factors held constant, with each draft position a player moves up (numerically closer to 1), his odds of reaching the next performance tier in the NBA increases by 6.13261%.
+
+
+# predict  
+```{r}
+# predict for someone with hsrank = 20 and draft_pk = 10
+print("Prediction for a player with hsrank = 20; draft_pk = 10")
+predict(prop_odds_fit,newdata = data.frame(hsrank=20, draft_pk =10))
+predict(prop_odds_fit,newdata = data.frame(hsrank=20, draft_pk =10),type="p")
+
+# predict for someone with hsrank = 1 and draft_pk = 1
+print("Prediction for a player with hsrank = 1; draft_pk = 1")
+predict(prop_odds_fit,newdata = data.frame(hsrank=1, draft_pk =1))
+predict(prop_odds_fit,newdata = data.frame(hsrank=1, draft_pk =1),type="p")
+
+# predict for someone with hsrank = 50 and draft_pk = 30
+print("Prediction for a player with hsrank = 50; draft_pk = 30")
+predict(prop_odds_fit,newdata = data.frame(hsrank=50, draft_pk =30))
+predict(prop_odds_fit,newdata = data.frame(hsrank=50, draft_pk =30),type="p")
+
+# predict for someone with hsrank = 100 and draft_pk = 60
+print("Prediction for a player with hsrank = 100; draft_pk = 60")
+predict(prop_odds_fit,newdata = data.frame(hsrank=100, draft_pk =60))
+predict(prop_odds_fit,newdata = data.frame(hsrank=100, draft_pk =60),type="p")
+```
+
+# remove insignificant covariates (hsrank) and re-fit model)
+```{r}
+prop_odds_fit2 <- polr(highest ~ draft_pk, data=rf_data, Hess = TRUE)
+summary(prop_odds_fit2)
+```
+
+AIC barely decreases, so lets keep in hsrank and OG model
+
+# see if we can get p-values  
+```{r}
+ctable_onesided2 <- coef(summary(prop_odds_fit2))
+
+## calculate and store p values
+p <- pnorm(abs(ctable_onesided2[, "t value"]), lower.tail = FALSE) 
+
+## combined table
+ctable_onesided2 <- cbind(ctable_onesided2, "p value" = p)
+
+ctable_onesided2
+```
+
+
+
+

@@ -1,0 +1,327 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+## References
+
+> http://uc-r.github.io/gbm_regression#:~:text=gbm%20%3A%20For%20each%20tree%2C%20the,the%20accuracy%20is%20again%20computed.   
+> https://www.slideshare.net/mark_landry/gbm-package-in-r  
+> https://datascienceplus.com/gradient-boosting-in-r/  
+> https://machinelearningmastery.com/gentle-introduction-gradient-boosting-algorithm-machine-learning/  
+
+
+# Required Packages
+```{r}
+require(dplyr)
+require(ggplot2)
+require(gplots)
+require(MASS)
+require(xgboost)
+require(gbm)
+require(randomForest)
+require(pdp)
+require(caret)
+```
+# Load Data
+```{r}
+load("C:/Users/isaac/CAPSTONE-STAT-482/R-STAT-482-Capstone/merged_data.rdata")
+str(data)
+```
+
+# 80/20 test-train split
+```{r}
+set.seed(1234)
+
+gbm_data = filter(data, !(is.na(total_seasons))) #remove na in total_season column
+# removed 943 obs from the original 1885, leaving 942 observations in new data set 
+
+# 80/20 train/test split
+gbm_data <- gbm_data %>% mutate(id = row_number())
+gbm_train = gbm_data %>% sample_frac(.80, replace = FALSE)
+gbm_test = anti_join(gbm_data, gbm_train, by = 'id')
+```
+
+# Gradient boosting with random parameters to start
+## This "test" model had good partial dependence plots (showed good downward/ upward trend)
+``` {r}
+gradient_boost_model = gbm(total_seasons ~ hsrank + draft_pk + draft_rd + smallMult + top100 + avgNBArank + nba_mean_ws48 + nba_mean_vorp + nba_mean_pipm + nba_mean_wa ,
+                           data = gbm_train, distribution  = "gaussian",
+                           n.trees = 5000,
+                           shrinkage = 0.01, 
+                           interaction.depth = 4, 
+                           cv.folds = 5) 
+# gaussian (squared error loss function), interaction.depth is tree depth, shrinkage is learning rate of gradient descent, 5-fold cross validation
+
+```
+
+# Variable Importance Plot
+```{r}
+gradient_boost_model
+par(mar = c(5, 8, 1, 1))
+summary(
+  gradient_boost_model, 
+  cBars = 10,
+  method = relative.influence, # also can use permutation.test.gbm
+  las = 2  # show all variables with labels horizontal
+  )
+```
+# Partial Dependence Plots with Smoothed Curve
+```{r}
+gradient_boost_model %>%
+  partial(pred.var = "avgNBArank", n.trees = gradient_boost_model$n.trees, grid.resolution = 100) %>%
+  autoplot(rug = TRUE, train = gbm_train, smooth=TRUE) + 
+  ggtitle("Partial Dependence Plot for Average NBA Rank") + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+gradient_boost_model %>%
+  partial(pred.var = "hsrank", n.trees = gradient_boost_model$n.trees, grid.resolution = 100) %>%
+  autoplot(rug = TRUE, train = gbm_train, smooth=TRUE) + 
+  ggtitle("Partial Dependence Plot for High School Rank") + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+gradient_boost_model %>%
+  partial(pred.var = "draft_pk", n.trees = gradient_boost_model$n.trees, grid.resolution = 100) %>%
+  autoplot(rug = TRUE, train = gbm_train, smooth=TRUE) + 
+  ggtitle("Partial Dependence Plot for Draft Pick") + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+gradient_boost_model %>%
+  partial(pred.var = "nba_mean_ws48", n.trees = gradient_boost_model$n.trees, grid.resolution = 100) %>%
+  autoplot(rug = TRUE, train = gbm_train, smooth=TRUE) + 
+  ggtitle("Partial Dependence Plot for nba_mean_ws48") + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+gradient_boost_model %>%
+  partial(pred.var = "nba_mean_vorp", n.trees = gradient_boost_model$n.trees, grid.resolution = 100) %>%
+  autoplot(rug = TRUE, train = gbm_train, smooth=TRUE) + 
+  ggtitle("Partial Dependence Plot for nba_mean_vorp") + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+gradient_boost_model %>%
+  partial(pred.var = "nba_mean_pipm", n.trees = gradient_boost_model$n.trees, grid.resolution = 100) %>%
+  autoplot(rug = TRUE, train = gbm_train, smooth=TRUE) + 
+  ggtitle("Partial Dependence Plot for nba_mean_pipm") + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+gradient_boost_model %>%
+  partial(pred.var = "nba_mean_wa", n.trees = gradient_boost_model$n.trees, grid.resolution = 100) %>%
+  autoplot(rug = TRUE, train = gbm_train, smooth=TRUE) + 
+  ggtitle("Partial Dependence Plot for nba_mean_wa") + 
+  theme(plot.title = element_text(hjust = 0.5))
+```
+# Compute RMSE of best iteration and plot loss function
+```{r}
+# get MSE and compute RMSE
+print(cat("RMSE:", sqrt(min(gradient_boost_model$cv.error))))
+
+
+# plot loss function as a result of n trees added to the ensemble
+gbm.perf(gradient_boost_model, method = "cv")
+```
+From the fit summary output, we see that 811 trees was the optimal number of trees needed with our specified parameters.  
+
+# Define Grid Search for Hyperparameter Tuning
+```{r}
+# modify hyperparameter grid
+hyper_grid <- expand.grid(
+  shrinkage = c(0.001, .01, .05, .1),
+  interaction.depth = c(3, 4, 5, 6, 7),
+  n.minobsinnode = c(5, 7, 10), # vary the minimum number of observations allowed in the trees' terminal nodes
+  bag.fraction = c(.65, .8, 1), # bag.fraction < 1 means doing stochastic gradient descent - which reduces chance you get stuck in local minima or miss the abs minumum
+  optimal_trees = 0,               # a place to dump results
+  min_RMSE = 0                     # a place to dump results
+)
+
+# total number of combinations
+nrow(hyper_grid)
+hyper_grid
+```
+
+# Re-train with Hyperparameter Tuning Over Parameter Grid
+```{r}
+# grid search 
+for(i in 1:nrow(hyper_grid)) {
+  
+  # reproducibility
+  set.seed(1234)
+  
+  # train model
+  gbm.tune <- gbm(
+    formula = total_seasons ~ hsrank + draft_pk + smallMult + avgNBArank + nba_mean_ws48 + nba_mean_vorp + nba_mean_pipm + nba_mean_wa, 
+    data = gbm_train,
+    distribution = "gaussian",
+    n.trees = 5000,
+    interaction.depth = hyper_grid$interaction.depth[i],
+    shrinkage = hyper_grid$shrinkage[i],
+    n.minobsinnode = hyper_grid$n.minobsinnode[i],
+    bag.fraction = hyper_grid$bag.fraction[i],  
+    train.fraction = .75, #instead of 5-fold cross validtion, just a 75/25 split
+    n.cores = NULL, # will use all cores by default
+    verbose = FALSE
+  )
+  
+  # add min training error and trees to grid
+  hyper_grid$optimal_trees[i] <- which.min(gbm.tune$valid.error)
+  hyper_grid$min_RMSE[i] <- sqrt(min(gbm.tune$valid.error))
+}
+```
+
+# display 10 best iterations based on lowest RMSE 
+```{r}
+hyper_grid %>% 
+  dplyr::arrange(min_RMSE) %>%
+  head(10)
+```
+
+# Fit final tuned model from best run
+```{r}
+# reproducibility
+set.seed(1234)
+
+gbm.fit.final = gbm(total_seasons ~ hsrank + draft_pk + smallMult + avgNBArank + nba_mean_ws48 + nba_mean_vorp + nba_mean_pipm + nba_mean_wa,
+                    data = gbm_train, 
+                    distribution  = "gaussian",
+                    n.trees = 100,
+                    shrinkage = 0.1, 
+                    interaction.depth = 7, 
+                    n.minobsinnode = 10,
+                    bag.fraction = .8, 
+                    cv.folds = 5)
+
+# gaussian (squared error loss function), interaction.depth is tree depth, shrinkage is learning rate of gradient descent, cv.folds is 5-fold cross validation
+```
+# Variable Importance Plot
+```{r}
+gbm.fit.final
+par(mar = c(5, 8, 1, 1))
+summary(
+  gbm.fit.final, 
+  cBars = 8,
+  method = relative.influence, # also can use permutation.test.gbm
+  las = 2  # show all variables with labels horizontal
+  )
+title("Relative Influence of Covariates on Total Seasons Played")
+legend(x=15, y=6.5, "nba_mean_wa = wins added\nnba_mean_vorp = value over replacement player\nnba_mean_ws48 = win shares per 48 minutes\nnba_mean_pipm = player impact plus minus", cex=0.9,  pt.cex = 1, bty="n")
+```
+
+From the fit summary output, we see that 36 trees was the optimal number of trees needed with our specified parameters.  
+
+# Partial Dependence Plots with Smoothed Curve
+```{r}
+gbm.fit.final %>%
+  partial(pred.var = "avgNBArank", n.trees = gbm.fit.final$n.trees, grid.resolution = 100) %>%
+  autoplot(rug = TRUE, train = gbm_train, smooth=TRUE) + 
+  ggtitle("Partial Dependence Plot for Average NBA Rank") + 
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ylab("total seasons played") +
+  xlab("average NBA rank")
+
+gbm.fit.final %>%
+  partial(pred.var = "hsrank", n.trees = gbm.fit.final$n.trees, grid.resolution = 100) %>%
+  autoplot(rug = TRUE, train = gbm_train, smooth=TRUE) + 
+  ggtitle("Partial Dependence Plot for High School Rank") + 
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ylab("total seasons played") +
+  xlab("high school rank")
+
+gbm.fit.final %>%
+  partial(pred.var = "draft_pk", n.trees = gbm.fit.final$n.trees, grid.resolution = 100) %>%
+  autoplot(rug = TRUE, train = gbm_train, smooth=TRUE) + 
+  ggtitle("Partial Dependence Plot for Draft Pick") + 
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ylab("total seasons played") +
+  xlab("draft pick")
+
+gbm.fit.final %>%
+  partial(pred.var = "nba_mean_ws48", n.trees = gbm.fit.final$n.trees, grid.resolution = 100) %>%
+  autoplot(rug = TRUE, train = gbm_train, smooth=TRUE) + 
+  ggtitle("Partial Dependence Plot for Win Shares Per 48 Min") + 
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ylab("total seasons played") +
+  xlab("mean win shares per 48 minutes")
+
+gbm.fit.final %>%
+  partial(pred.var = "nba_mean_vorp", n.trees = gbm.fit.final$n.trees, grid.resolution = 100) %>%
+  autoplot(rug = TRUE, train = gbm_train, smooth=TRUE) + 
+  ggtitle("Partial Dependence Plot for VORP") + 
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ylab("total seasons played")+
+  xlab("mean VORP")
+
+gbm.fit.final %>%
+  partial(pred.var = "nba_mean_pipm", n.trees = gbm.fit.final$n.trees, grid.resolution = 100) %>%
+  autoplot(rug = TRUE, train = gbm_train, smooth=TRUE) + 
+  ggtitle("Partial Dependence Plot for PIPM") + 
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ylab("total seasons played") +
+  xlab("mean PIPM")
+
+gbm.fit.final %>%
+  partial(pred.var = "nba_mean_wa", n.trees = gbm.fit.final$n.trees, grid.resolution = 100) %>%
+  autoplot(rug = TRUE, train = gbm_train, smooth=TRUE) + 
+  ggtitle("Partial Dependence Plot for Wins Added") + 
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ylab("total seasons played") +
+  xlab("mean wins added")
+```
+
+
+# Compute RMSE of best iteration and plot loss function
+```{r}
+# get MSE and compute RMSE
+print(cat("RMSE:", sqrt(min(gbm.fit.final$cv.error))))
+
+
+# plot loss function as a result of n trees added to the ensemble
+gbm.perf(gbm.fit.final, method = "cv")
+legend(55, y=16, "green line = testing error\nblack line = training error\nblue line = minimum testing error", bty = "n")
+title("Squared Error for Training and Testing")
+```
+
+# Plotting the Partial Dependence Plot
+```{r}
+#Plot of total_seasons with hs rank dependent variable
+plot(gbm.fit.final,i="hsrank") 
+
+plot(gbm.fit.final,i="draft_pk") 
+
+plot(gbm.fit.final, i="avgNBArank")
+
+plot(gbm.fit.final, i="smallMult")
+
+
+
+
+```
+
+# Prediction on Test Set
+```{r}
+pred <- predict(gbm.fit.final, n.trees = gbm.fit.final$n.trees, gbm_test)
+
+# results
+caret::RMSE(pred, gbm_test$total_seasons)
+```
+Our prediction RMSE is close to our training RMSE for our best tuned model, which is a good sign that our model is not overfitting!
+
+# Prediction on Test Set with Final Model and Plot the Test MSE versus number of trees
+```{r}
+# n.trees = seq(from=100 ,to=10000, by=100) #no. of trees
+n.trees = seq(from=1 ,to=100, by=1) #no. of trees
+
+#Generating a Prediction matrix for each Tree
+predmatrix<-predict(gbm.fit.final,gbm_test,n.trees = n.trees)
+# dim(predmatrix) #dimentions of the Prediction Matrix
+
+#Calculating The Mean squared Test Error
+test.error<-with(gbm_test,apply( (predmatrix-total_seasons)^2,2,mean))
+# head(test.error) #contains the Mean squared test error for each of the 100 trees averaged
+
+#Plotting the test error vs number of trees
+plot(n.trees , test.error , pch=19,col="blue",xlab="Number of Trees",ylab="Test MSE", main = "Perfomance of Boosting on Test Set")
+
+#adding the RandomForests Minimum Error line trained on same data and similar parameters
+abline(h = min(test.error),col="red") #test.err is the test error of a Random forest fitted on same data
+legend("topright",c("Minimum Test Error Line for Number of Trees"),col="red",lty=1,lwd=1)
+```
+
+

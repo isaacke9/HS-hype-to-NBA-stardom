@@ -1,0 +1,277 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+# Required Packages
+```{r}
+require(dplyr)
+require(ggplot2)
+require(gplots)
+require(MASS)
+require(qualityTools)
+require(fitdistrplus)
+require(DescTools)
+require(corrplot)
+require(reshape2)
+require(heatmaply)
+```
+
+# Setup
+```{r warning=FALSE}
+setwd("C:/Users/isaac/CAPSTONE-STAT-482/Datasets")
+paths = read.csv('paths.csv')
+players = read.csv('players.csv')
+setwd("C:/Users/isaac/CAPSTONE-STAT-482/R-STAT-482-Capstone")
+```
+
+# Trim Duplicate Columns and Merge Data
+```{r}
+# remove repetitive and unnecessary columns in paths.csv
+paths = select(paths, -valid_seasons, -link)
+# remove duplicate observations
+paths = distinct(paths) 
+
+# remove repetitive and unnecessary columns in players.csv
+players = select(players, -college, -link, -rank, -draft_year, -draft_rd, -draft_pk, -recruit_year, -bbrID, -pick_overall, -pick_round, -pick_number)
+# remove duplicate observations
+players = distinct(players)
+```
+
+# Merge two data frames into one
+```{r}
+data = inner_join(paths, players, by = "name")
+```
+
+# Change data types 
+```{r}
+# data$college = as.factor(data$college)
+data$smallMult = as.factor(data$smallMult)
+data$smallMult = as.factor(data$smallMult)
+data$draft_year = as.factor(data$draft_year)
+data$draft_rd = as.factor(data$draft_rd)
+data$recruit_year = as.factor(data$recruit_year)
+data$top = as.factor(data$top)
+data$highSchool = as.factor(data$highSchool)
+data$coll = as.factor(data$coll)
+data$draft = as.factor(data$draft)
+data$rookie = as.factor(data$rookie)
+data$bad = as.factor(data$bad)
+data$good = as.factor(data$good)
+data$great = as.factor(data$great)
+data$allstar = as.factor(data$allstar)
+data$highest = as.factor(data$highest)
+```
+# Re order factors for "highest" and rename various columns
+```{r}
+data$highest <- factor(data$highest, levels = c("highSchool", "college", "draft", "rookie", "bad", "good", "great", "allstar"))
+# data = rename(data, hsrank = rank)
+# data = rename(data, avgNBArank = avgRank)
+# data = rename(data, top100 = top)
+str(data)
+```
+
+# 5 Number Summary (also check number of NAs)
+```{r}
+summary(data)
+```
+# Plot the Highest Level Reached by Draft Round
+```{r}
+college_funnel = ggplot(data = subset(data, !is.na(draft_rd)), aes(x=highest)) + geom_bar(aes(fill=draft_rd)) + ggtitle("Bar Chart Highest Level Reached by Draft Round") + theme(plot.title = element_text(hjust = 0.5)) + xlab("highest level reached")#remove na rows for draft_rd
+plot(college_funnel)
+```
+# Distribution of avgRank
+```{r}
+avgRank_distr = ggplot(data, aes(x=avgRank)) + geom_histogram(binwidth = 5, fill="dark green")  + ggtitle("Histogram of Average NBA Rank") + theme(plot.title = element_text(hjust = 0.5))
+plot(avgRank_distr)
+```
+# Kernel Density Estimate of avgRank
+```{r}
+plot(density(data$avgRank, na.rm=TRUE, kernel = "gaussian", bw="nrd0"), main = "Kernel Density Estimate of avgRank with Gaussian Kernel", xlab = "Average NBA Rank")
+```
+
+# Distribution of total_seasons
+```{r}
+total_seasons_distr = ggplot(data, aes(x=total_seasons)) + geom_histogram(binwidth = 1,position="dodge", fill="blue")  + ggtitle("Histogram of Total Seasons Played") + theme(plot.title = element_text(hjust = 0.5))+xlab("Total NBA seasons played")
+plot(total_seasons_distr) 
+```
+# Kernel Density Estimate of total_seasons
+```{r}
+plot(density(data$total_seasons, na.rm=TRUE, kernel = "gaussian", bw="nrd0"), main = "Kernel Density Estimate of Total Seasons (Gaussian Kernel)", xlab = "Total NBA seasons played")
+```
+# Fit Poisson Curve to Model Using MLE 
+```{r}
+total_season_rmna = as.vector(na.omit(as.vector(data$total_seasons)))
+poisson_fit = fitdistr(total_season_rmna, "poisson")
+poisson_fit
+```
+# Fit qqplot for poisson model to check goodness of fit
+```{r}
+# qqPlot(total_season_rmna, "Poisson", main = "QQPlot for Poisson Distirbution Model")
+plot(fitdist(total_season_rmna,"pois"))
+```
+# Fit qqplot
+```{r}
+PlotQQ(total_season_rmna, function(p) qpois(p, 5.05201699), main = "QQPlot for Total Seasons: Poisson Distribution")
+```
+
+
+
+
+# Plot the Distribution of players across draft year
+```{r}
+draft_year_distr = ggplot(data, aes(x=draft_year)) + geom_bar(fill="light blue") + ylim(0,100)
+plot(draft_year_distr)
+```
+# Plot the Distribution of highest level reached across time
+```{r}
+highest_time_distr = ggplot(data = subset(data, !is.na(draft_year)), aes(x=draft_year)) + geom_bar(aes(fill=highest)) + ylim(0,100) + ggtitle("Bar Chart of Players per Draft Class by Highest Level Reached") + theme(plot.title = element_text(hjust = 0.5))+xlab("Draft Year")
+plot(highest_time_distr)
+```
+# Plot the Highest Level Reached for draft pick
+```{r}
+draft_pick_level = ggplot(data, aes(y = stat(count) / sum(count),x=draft_pk)) + geom_histogram(color="black",aes(fill=highest),binwidth=5, size=0.05) + ggtitle("Histogram of Draft Pick by Highest Level Reached") + theme(plot.title = element_text(hjust = 0.5))+xlab("Draft Pick Number")
+plot(draft_pick_level) + ylab("Relative Frequency")
+```
+# Scatterplot of player's mean win shares per 48 minutes versus high school rank
+```{r}
+ggplot(data, aes(x=hsrank, y=nba_mean_ws48)) + geom_point()
+```
+# Boxplot of high school rank by highest level reached
+```{r}
+ggplot(data, aes(x=highest, y=hsrank)) + geom_boxplot(outlier.shape = NA) + geom_jitter(width = 0.15, alpha = 0.15) + ggtitle("Box Plots of High School Rank by Highest Level Reached") + theme(plot.title = element_text(hjust = 0.5))+xlab("Highest Level Reached") + ylab("High School Rank")
+```
+
+# Scatterplot of total seasons played versus high school rank
+```{r}
+ggplot(data, aes(x=hsrank, y=total_seasons)) + geom_point() + ggtitle("Scatterplot of Total Seasons Played vs High School Rank") + theme(plot.title = element_text(hjust = 0.5))+xlab("High School Rank") +ylab("Total NBA Seasons Played")
+```
+# Scatterplot of draft pick versus high school rank
+```{r}
+ggplot(data, aes(x=hsrank, y=draft_pk)) + geom_point()+ ggtitle("Scatterplot of Draft Pick vs High School Rank") + theme(plot.title = element_text(hjust = 0.5))+xlab("High School Rank") +ylab("Draft Pick Number")
+```
+
+# Scatterplot of avgRank versus high school rank
+```{r}
+ggplot(data, aes(x=hsrank, y=avgNBArank)) + geom_point()+ ggtitle("Scatterplot of Average NBA Rank vs High School Rank") + theme(plot.title = element_text(hjust = 0.5))+xlab("High School Rank") +ylab("Average NBA Rank")
+```
+# Scatterplot of avgRank versus draft pick number
+```{r}
+ggplot(data, aes(x=draft_pk, y=avgRank)) + geom_point()
+```
+# Scatterplot of total seasons versus draft pick number
+```{r}
+ggplot(data, aes(x=draft_pk, y=total_seasons)) + geom_point()
+```
+# Correlation matrix for numeric data
+```{r}
+only_numeric_data = dplyr::select(data, hsrank, draft_pk, avgNBArank, nba_mean_ws48:valid_seasons)
+cormat = round(cor(only_numeric_data, method = c("pearson"), use="pairwise.complete.obs"),2)
+cormat
+corrplot(cormat)
+
+```
+# try another correlation heatmap
+```{r}
+# Get lower triangle of the correlation matrix
+  get_lower_tri<-function(cormat){
+    cormat[upper.tri(cormat)] <- NA
+    return(cormat)
+  }
+  # Get upper triangle of the correlation matrix
+  get_upper_tri <- function(cormat){
+    cormat[lower.tri(cormat)]<- NA
+    return(cormat)
+  }
+
+melted_cormat <- melt(only_numeric_data.cor)
+ggplot(data = melted_cormat, aes(x=Var1, y=Var2, fill=value)) + 
+  geom_tile()
+
+upper_tri <- get_upper_tri(cormat)
+
+# Melt the correlation matrix
+library(reshape2)
+melted_cormat <- melt(upper_tri, na.rm = TRUE)
+# Heatmap
+library(ggplot2)
+ggplot(data = melted_cormat, aes(Var2, Var1, fill = value))+
+ geom_tile(color = "white")+
+ scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+   midpoint = 0, limit = c(-1,1), space = "Lab", 
+   name="Pearson\nCorrelation") +
+  theme_minimal()+ 
+ theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+    size = 12, hjust = 1))+
+ coord_fixed()
+
+
+# reorder correlation matrix
+reorder_cormat <- function(cormat){
+# Use correlation between variables as distance
+dd <- as.dist((1-cormat)/2)
+hc <- hclust(dd)
+cormat <-cormat[hc$order, hc$order]
+}
+
+# Reorder the correlation matrix
+cormat <- reorder_cormat(cormat)
+upper_tri <- get_upper_tri(cormat)
+# Melt the correlation matrix
+melted_cormat <- melt(upper_tri, na.rm = TRUE)
+# Create a ggheatmap
+ggheatmap <- ggplot(melted_cormat, aes(Var2, Var1, fill = value))+
+ geom_tile(color = "white")+
+ scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+   midpoint = 0, limit = c(-1,1), space = "Lab", 
+    name="Pearson\nCorrelation") +
+  theme_minimal()+ # minimal theme
+ theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+    size = 12, hjust = 1))+
+ coord_fixed()
+# Print the heatmap
+print(ggheatmap)
+
+## Add correlation coefficeints on the heat map
+
+ggheatmap + 
+geom_text(aes(Var2, Var1, label = value), color = "black", size = 4) +
+theme(
+  axis.title.x = element_blank(),
+  axis.title.y = element_blank(),
+  panel.grid.major = element_blank(),
+  panel.border = element_blank(),
+  panel.background = element_blank(),
+  axis.ticks = element_blank(),
+  legend.justification = c(1, 0),
+  legend.position = c(0.6, 0.7),
+  legend.direction = "horizontal")+
+  guides(fill = guide_colorbar(barwidth = 7, barheight = 1,
+                title.position = "top", title.hjust = 0.5))
+```
+
+
+
+# simple linear model for total_seasons
+```{r}
+fit1 = lm(total_seasons ~ log(draft_pk) + log(rank), data = data)
+summary(fit1)
+plot(fit1)
+```
+# simple linear model for avgRank
+```{r}
+fit2 = lm(avgRank ~ log(draft_pk) + log(rank), data = data)
+summary(fit2)
+plot(fit2)
+```
+# simple linear model for draft_pk
+```{r}
+fit3 = lm(draft_pk ~ log(rank), data = data)
+summary(fit3)
+plot(fit3)
+```
+# simple linear model for mean win shares per 48 minutes
+```{r}
+fit4 = lm(nba_mean_ws48 ~ rank + draft_pk, data = data)
+summary(fit4)
+plot(fit4)
+```
