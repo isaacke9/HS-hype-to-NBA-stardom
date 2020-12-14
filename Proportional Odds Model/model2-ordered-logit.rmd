@@ -15,14 +15,6 @@ output: html_notebook
 > https://www.blopig.com/blog/2017/04/a-very-basic-introduction-to-random-forests-using-r/  
 
 
-## Motivation  
-### Aim 2  
-My second aim is to test my related hypothesis that the better a player’s high school rank, draft position, and NBA statistics are, the higher the player’s maximum level reached will be (draft, rookie, bad, good, great, all-star). My goal is to assess which factors are good predictors of peak performance.  
-  
-### Statistical Analysis Plan 2  
-I will investigate my hypothesis in aim 2. Since this is a classification problem involving ordinal data, I will use the methods of naïve Bayes classifiers and support vector machines. Based on factors such as high school rank, college/draft data, and NBA statistics, I will train a predictive model to place each player into different buckets of NBA success, or highest level reached: draft, rookie, bad, good, great, or all-star.
-
-
 # Required Packages
 ```{r}
 require(dplyr)
