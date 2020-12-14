@@ -1,5 +1,6 @@
 # From High School Hype to NBA Stardom
 ### STAT Capstone Project - Isaac Ke
+### December 2020
 
 ## Introduction
 <p>LeBron James. Stephen Curry. What do these household names have in common? Surely, they both have been named the NBA’s Most Valuable Player (MVP) on multiple occasions and have led their teams to numerous world championships. However, only LeBron James was ranked the number one best player coming out of high school. In fact, Steph Curry was unranked by recruiters in high school which meant that he went so unnoticed that he couldn’t even crack the bottom of the list. Is future stardom really that hard to predict? Or was Steph Curry a once-in-a-blue-moon type of phenom?</p>
@@ -19,8 +20,8 @@
 <p>My second aim is to test my related hypothesis that the better a player’s high school rank and draft position are, the higher the player’s maximum level reached will be (draft, rookie, bad, good, great, all-star). My goal is to assess which factors are good predictors of peak performance. </p>
 
 ## Methods
-<p>First, I do exploratory data analysis. Then, I utilize two models: the first being gradient boosting machines (gbm) to address aim 2. The second being a proportional odds model (ordered logistic regression) to address aim 2. </p>
+<p>First, I do exploratory data analysis. Then, I fit two statistical models: the first being gradient boosting machines (gbm) to address aim 1, and the second being a proportional odds model (ordered logistic regression) to address aim 2. </p>
 
 ## Results
-The results can be found in the [Results](https://github.com/isaacke9/HS-hype-to-NBA-stardom/Results) folder.
+The results (with relevant plots, discussion, and conclusions) are summarized in the [Results](https://github.com/isaacke9/HS-hype-to-NBA-stardom/tree/main/Results) folder.
 
