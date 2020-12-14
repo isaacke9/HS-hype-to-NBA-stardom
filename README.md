@@ -18,3 +18,9 @@
 <p>My first aim is to test my hypothesis that a player’s high school rank and draft position have a strong positive association with NBA career longevity. I aim to uncover what the true relationship is between a player’s pre-professional rankings and how many seasons they last in the NBA. </p>
 <p>My second aim is to test my related hypothesis that the better a player’s high school rank and draft position are, the higher the player’s maximum level reached will be (draft, rookie, bad, good, great, all-star). My goal is to assess which factors are good predictors of peak performance. </p>
 
+## Methods
+<p>First, I do exploratory data analysis. Then, I utilize two models: the first being gradient boosting machines (gbm) to address aim 2. The second being a proportional odds model (ordered logistic regression) to address aim 2. </p>
+
+## Results
+The results can be found in the [Results](https://github.com/isaacke9/HS-hype-to-NBA-stardom/Results) folder.
+
